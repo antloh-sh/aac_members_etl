@@ -9,6 +9,7 @@
     <style>
         .drop-zone { border: 2px dashed #0d6efd; border-radius: 10px; padding: 40px; cursor: pointer; transition: 0.3s; }
         .drop-zone:hover { background: #f8f9fa; }
+        .error-border { border-color: #dc3545 !important; background-color: #fff8f8; }
     </style>
 </head>
 <body class="bg-light">
@@ -16,10 +17,12 @@
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <div class="card shadow border-0">
-                    <div class="card-header bg-primary text-white py-3">
-                        <h3 class="mb-0 text-center">📂 AAC Data ETL Tool</h3>
+                    <div class="card-header bg-primary text-white py-3 text-center">
+                        <h3 class="mb-0">📂 AAC Data ETL Tool</h3>
                     </div>
                     <div class="card-body p-4">
+                        <div id="alertBox"></div>
+
                         <label class="form-label fw-bold">1. Select File Type</label>
                         <select id="etlType" class="form-select form-select-lg mb-4">
                             <option value="membership">Member Details (DataListing-AACMemberDetails)</option>
@@ -35,9 +38,6 @@
                         <button id="processBtn" class="btn btn-success btn-lg w-100 mb-3" disabled>3. Run ETL Process</button>
                         <a id="downloadBtn" class="btn btn-outline-primary btn-lg w-100 d-none">4. Download Result</a>
                     </div>
-                    <div class="card-footer bg-white">
-                        <div id="status" class="text-center text-muted small">Ready</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -49,12 +49,12 @@
         const etlType = document.getElementById('etlType');
         const processBtn = document.getElementById('processBtn');
         const downloadBtn = document.getElementById('downloadBtn');
-        const status = document.getElementById('status');
+        const alertBox = document.getElementById('alertBox');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
 
-        // Mapping definitions
         const config = {
             membership: {
+                expectedHeaders: ['RegistrationDocumentNumber', 'FullNameNative', 'DateOfBirth'],
                 fileName: "ETL-AACMemberDetails.csv",
                 mapping: {
                     'RegistrationDocumentNumber': 'registrationdocumentnumber',
@@ -68,6 +68,7 @@
                 }
             },
             family: {
+                expectedHeaders: ['Patient_NRIC_Fin_Passport_No___', 'Family_Member_Name__'],
                 fileName: "ETL-FamilyMembersListing.csv",
                 mapping: {
                     'Patient_NRIC_Fin_Passport_No___': 'patientnricfinpassportno',
@@ -79,57 +80,79 @@
             }
         };
 
-        // UI Interactions
+        function showAlert(message, type = 'danger') {
+            alertBox.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`;
+        }
+
         dropZone.onclick = () => fileInput.click();
+        
         fileInput.onchange = () => {
             if (fileInput.files.length > 0) {
                 fileNameDisplay.innerText = "Selected: " + fileInput.files[0].name;
                 processBtn.disabled = false;
                 downloadBtn.classList.add('d-none');
+                alertBox.innerHTML = '';
+                dropZone.classList.remove('error-border');
             }
         };
 
         processBtn.onclick = () => {
             const file = fileInput.files[0];
             const type = etlType.value;
-            status.innerText = "Processing " + type + " data...";
+            const setup = config[type];
 
             Papa.parse(file, {
                 header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    const setup = config[type];
-                    const transformed = results.data.map((row, index) => {
-                        let newRow = {};
-                        
-                        // Add ID for Family ETL
-                        if (type === 'family') newRow['id'] = index + 1;
+                preview: 1, // Only check the first row for headers initially
+                complete: function(headerCheck) {
+                    const headers = headerCheck.meta.fields;
+                    const missing = setup.expectedHeaders.filter(h => !headers.includes(h));
 
-                        for (let srcKey in setup.mapping) {
-                            const targetKey = setup.mapping[srcKey];
-                            let value = row[srcKey] || "";
+                    if (missing.length > 0) {
+                        showAlert(`<strong>Error:</strong> The uploaded file does not match the <strong>${type}</strong> format.<br>Missing columns: ${missing.join(', ')}`);
+                        dropZone.classList.add('error-border');
+                        processBtn.disabled = true;
+                        return;
+                    }
 
-                            // Logic for Members: Dates & Boolean
-                            if (type === 'membership') {
-                                if (srcKey === 'ResidesWithinServiceBoundaryStr') {
-                                    value = value.toLowerCase() === 'yes' ? 'true' : 'false';
+                    // If validation passes, process the full file
+                    Papa.parse(file, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: function(results) {
+                            const transformed = results.data.map((row, index) => {
+                                let newRow = {};
+                                if (type === 'family') newRow['id'] = index + 1;
+
+                                for (let srcKey in setup.mapping) {
+                                    const targetKey = setup.mapping[srcKey];
+                                    let value = row[srcKey] || "";
+
+                                    if (type === 'membership') {
+                                        if (srcKey === 'ResidesWithinServiceBoundaryStr') {
+                                            value = value.toLowerCase() === 'yes' ? 'true' : 'false';
+                                        }
+                                        if (srcKey === 'DateOfBirth' && value.includes('-')) {
+                                            const d = new Date(value);
+                                            if (!isNaN(d)) value = d.toISOString().split('T')[0];
+                                        }
+                                    }
+                                    newRow[targetKey] = value;
                                 }
-                                if (srcKey === 'DateOfBirth' && value.includes('-')) {
-                                    const d = new Date(value);
-                                    if (!isNaN(d)) value = d.toISOString().split('T')[0];
-                                }
-                            }
-                            newRow[targetKey] = value;
+                                return newRow;
+                            });
+
+                            const csvOutput = Papa.unparse(transformed);
+                            const blob = new Blob([csvOutput], { type: 'text/csv' });
+                            downloadBtn.href = URL.createObjectURL(blob);
+                            downloadBtn.download = setup.fileName;
+                            downloadBtn.classList.remove('d-none');
+                            showAlert(`Success! ${setup.fileName} is ready.`, 'success');
                         }
-                        return newRow;
                     });
-
-                    const csvOutput = Papa.unparse(transformed);
-                    const blob = new Blob([csvOutput], { type: 'text/csv' });
-                    downloadBtn.href = URL.createObjectURL(blob);
-                    downloadBtn.download = setup.fileName;
-                    downloadBtn.classList.remove('d-none');
-                    status.innerHTML = "✅ Done! <br>Converted to " + setup.fileName;
                 }
             });
         };
