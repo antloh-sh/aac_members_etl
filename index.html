@@ -2,84 +2,134 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Membership ETL Tool</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AAC Data ETL Tool</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        .drop-zone { border: 2px dashed #0d6efd; border-radius: 10px; padding: 40px; cursor: pointer; transition: 0.3s; }
+        .drop-zone:hover { background: #f8f9fa; }
+    </style>
 </head>
 <body class="bg-light">
     <div class="container py-5">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
-                <h2 class="mb-0">📂 Membership File ETL</h2>
-            </div>
-            <div class="card-body text-center">
-                <p>Upload <strong>DataListing-AACMemberDetails.csv</strong> to transform it.</p>
-                <input type="file" id="csvFile" class="form-control mb-3" accept=".csv">
-                <button id="processBtn" class="btn btn-success btn-lg w-100" disabled>1. Process File</button>
-                <a id="downloadBtn" class="btn btn-outline-primary btn-lg w-100 mt-3 d-none">2. Download Processed CSV</a>
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow border-0">
+                    <div class="card-header bg-primary text-white py-3">
+                        <h3 class="mb-0 text-center">📂 AAC Data ETL Tool</h3>
+                    </div>
+                    <div class="card-body p-4">
+                        <label class="form-label fw-bold">1. Select File Type</label>
+                        <select id="etlType" class="form-select form-select-lg mb-4">
+                            <option value="membership">Member Details (DataListing-AACMemberDetails)</option>
+                            <option value="family">Family Members (FamilyMembersListing)</option>
+                        </select>
+
+                        <label class="form-label fw-bold">2. Upload Source CSV</label>
+                        <div id="dropZone" class="drop-zone text-center mb-3">
+                            <span id="fileNameDisplay">Drag & drop CSV file here or click to browse</span>
+                            <input type="file" id="csvFile" class="d-none" accept=".csv">
+                        </div>
+
+                        <button id="processBtn" class="btn btn-success btn-lg w-100 mb-3" disabled>3. Run ETL Process</button>
+                        <a id="downloadBtn" class="btn btn-outline-primary btn-lg w-100 d-none">4. Download Result</a>
+                    </div>
+                    <div class="card-footer bg-white">
+                        <div id="status" class="text-center text-muted small">Ready</div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div id="status" class="mt-4 text-center text-muted"></div>
     </div>
 
     <script>
         const fileInput = document.getElementById('csvFile');
+        const dropZone = document.getElementById('dropZone');
+        const etlType = document.getElementById('etlType');
         const processBtn = document.getElementById('processBtn');
         const downloadBtn = document.getElementById('downloadBtn');
         const status = document.getElementById('status');
-        let processedData = null;
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
 
-        fileInput.onchange = () => { processBtn.disabled = !fileInput.files.length; };
+        // Mapping definitions
+        const config = {
+            membership: {
+                fileName: "ETL-AACMemberDetails.csv",
+                mapping: {
+                    'RegistrationDocumentNumber': 'registrationdocumentnumber',
+                    'FullNameNative': 'fullnamenative',
+                    'ToAddressAs': 'toaddressas',
+                    'DateOfBirth': 'dateofbirth',
+                    'Gender': 'gender',
+                    'Phone': 'phone',
+                    'ResidesWithinServiceBoundaryStr': 'resideswithinserviceboundarystr',
+                    'FullAddress': 'fulladdress'
+                }
+            },
+            family: {
+                fileName: "ETL-FamilyMembersListing.csv",
+                mapping: {
+                    'Patient_NRIC_Fin_Passport_No___': 'patientnricfinpassportno',
+                    'Family_Member_Name__': 'familymembername',
+                    'Relationship____To_follow_ILTC_Master_List_': 'relationshiptofollowiltcmasterlist',
+                    'Home_Phone': 'homephone',
+                    'Mobile_Phone': 'mobilephone'
+                }
+            }
+        };
+
+        // UI Interactions
+        dropZone.onclick = () => fileInput.click();
+        fileInput.onchange = () => {
+            if (fileInput.files.length > 0) {
+                fileNameDisplay.innerText = "Selected: " + fileInput.files[0].name;
+                processBtn.disabled = false;
+                downloadBtn.classList.add('d-none');
+            }
+        };
 
         processBtn.onclick = () => {
             const file = fileInput.files[0];
-            status.innerText = "Processing...";
+            const type = etlType.value;
+            status.innerText = "Processing " + type + " data...";
 
             Papa.parse(file, {
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
-                    // ETL Mapping Logic
-                    const mapping = {
-                        'RegistrationDocumentNumber': 'registrationdocumentnumber',
-                        'FullNameNative': 'fullnamenative',
-                        'ToAddressAs': 'toaddressas',
-                        'DateOfBirth': 'dateofbirth',
-                        'Gender': 'gender',
-                        'Phone': 'phone',
-                        'ResidesWithinServiceBoundaryStr': 'resideswithinserviceboundarystr',
-                        'FullAddress': 'fulladdress'
-                    };
-
-                    const transformed = results.data.map(row => {
+                    const setup = config[type];
+                    const transformed = results.data.map((row, index) => {
                         let newRow = {};
-                        for (let key in mapping) {
-                            let value = row[key] || "";
-                            
-                            // Transform Boolean
-                            if (key === 'ResidesWithinServiceBoundaryStr') {
-                                value = value.toLowerCase() === 'yes' ? 'true' : 'false';
+                        
+                        // Add ID for Family ETL
+                        if (type === 'family') newRow['id'] = index + 1;
+
+                        for (let srcKey in setup.mapping) {
+                            const targetKey = setup.mapping[srcKey];
+                            let value = row[srcKey] || "";
+
+                            // Logic for Members: Dates & Boolean
+                            if (type === 'membership') {
+                                if (srcKey === 'ResidesWithinServiceBoundaryStr') {
+                                    value = value.toLowerCase() === 'yes' ? 'true' : 'false';
+                                }
+                                if (srcKey === 'DateOfBirth' && value.includes('-')) {
+                                    const d = new Date(value);
+                                    if (!isNaN(d)) value = d.toISOString().split('T')[0];
+                                }
                             }
-                            // Transform Dates (Simple string check)
-                            if (key === 'DateOfBirth' && value.includes('-')) {
-                                const d = new Date(value);
-                                if (!isNaN(d)) value = d.toISOString().split('T')[0];
-                            }
-                            
-                            newRow[mapping[key]] = value;
+                            newRow[targetKey] = value;
                         }
                         return newRow;
                     });
 
-                    // Create CSV for download
                     const csvOutput = Papa.unparse(transformed);
                     const blob = new Blob([csvOutput], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-
-                    downloadBtn.href = url;
-                    downloadBtn.download = "ETL-AACMemberDetails.csv";
+                    downloadBtn.href = URL.createObjectURL(blob);
+                    downloadBtn.download = setup.fileName;
                     downloadBtn.classList.remove('d-none');
-                    status.innerText = "✅ Success! File ready for download.";
+                    status.innerHTML = "✅ Done! <br>Converted to " + setup.fileName;
                 }
             });
         };
