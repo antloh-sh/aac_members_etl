@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Membership ETL Tool</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">📂 Membership File ETL</h2>
+            </div>
+            <div class="card-body text-center">
+                <p>Upload <strong>DataListing-AACMemberDetails.csv</strong> to transform it.</p>
+                <input type="file" id="csvFile" class="form-control mb-3" accept=".csv">
+                <button id="processBtn" class="btn btn-success btn-lg w-100" disabled>1. Process File</button>
+                <a id="downloadBtn" class="btn btn-outline-primary btn-lg w-100 mt-3 d-none">2. Download Processed CSV</a>
+            </div>
+        </div>
+        <div id="status" class="mt-4 text-center text-muted"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('csvFile');
+        const processBtn = document.getElementById('processBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const status = document.getElementById('status');
+        let processedData = null;
+
+        fileInput.onchange = () => { processBtn.disabled = !fileInput.files.length; };
+
+        processBtn.onclick = () => {
+            const file = fileInput.files[0];
+            status.innerText = "Processing...";
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    // ETL Mapping Logic
+                    const mapping = {
+                        'RegistrationDocumentNumber': 'registrationdocumentnumber',
+                        'FullNameNative': 'fullnamenative',
+                        'ToAddressAs': 'toaddressas',
+                        'DateOfBirth': 'dateofbirth',
+                        'Gender': 'gender',
+                        'Phone': 'phone',
+                        'ResidesWithinServiceBoundaryStr': 'resideswithinserviceboundarystr',
+                        'FullAddress': 'fulladdress'
+                    };
+
+                    const transformed = results.data.map(row => {
+                        let newRow = {};
+                        for (let key in mapping) {
+                            let value = row[key] || "";
+                            
+                            // Transform Boolean
+                            if (key === 'ResidesWithinServiceBoundaryStr') {
+                                value = value.toLowerCase() === 'yes' ? 'true' : 'false';
+                            }
+                            // Transform Dates (Simple string check)
+                            if (key === 'DateOfBirth' && value.includes('-')) {
+                                const d = new Date(value);
+                                if (!isNaN(d)) value = d.toISOString().split('T')[0];
+                            }
+                            
+                            newRow[mapping[key]] = value;
+                        }
+                        return newRow;
+                    });
+
+                    // Create CSV for download
+                    const csvOutput = Papa.unparse(transformed);
+                    const blob = new Blob([csvOutput], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+
+                    downloadBtn.href = url;
+                    downloadBtn.download = "ETL-AACMemberDetails.csv";
+                    downloadBtn.classList.remove('d-none');
+                    status.innerText = "✅ Success! File ready for download.";
+                }
+            });
+        };
+    </script>
+</body>
+</html>
