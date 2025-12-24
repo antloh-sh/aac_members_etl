@@ -1,52 +1,33 @@
-# 📂 Membership ETL Tool
+# 📂 AAC Membership & Family ETL Tool
 
-A lightweight, browser-based utility to transform membership data exports into a standardized ETL format. This tool runs entirely in your browser via GitHub Pages, ensuring your data never leaves your local machine.
+A web-based tool hosted on GitHub Pages for processing membership and family listings.
 
 ## 🚀 Live Link
-[**Click here to open the Web App**](https://antloh-sh.github.io/aac_members_etl/)
+[**Open the Web App**](https://antloh-sh.github.io/aac_members_etl/)
 
 ---
 
-## 🛠 Functionality
-This tool automates the cleaning and reformatting of membership CSV files.
+## 🛠 Supported Conversions
 
-### 1. Data Mapping
-It maps the original source columns to the required system headers:
-| Source Column (DataListing) | Target Header (ETL) |
-| :--- | :--- |
-| `RegistrationDocumentNumber` | `registrationdocumentnumber` |
-| `FullNameNative` | `fullnamenative` |
-| `ToAddressAs` | `toaddressas` |
-| `DateOfBirth` | `dateofbirth` |
-| `Gender` | `gender` |
-| `Phone` | `phone` |
-| `ResidesWithinServiceBoundaryStr` | `resideswithinserviceboundarystr` |
-| `FullAddress` | `fulladdress` |
+### 1. Member Details
+- **Source:** `DataListing-AACMemberDetails.csv`
+- **Output:** `ETL-AACMemberDetails.csv`
+- **Actions:** Maps 8 core columns, converts dates to `YYYY-MM-DD`, and changes "Yes/No" to "true/false".
 
-### 2. Automated Transformations
-* **Date Formatting:** Converts dates (e.g., `01-Oct-1942`) to ISO format (`1942-10-01`).
-* **Boolean Mapping:** Converts `Yes/No` values to `true/false` for system compatibility.
-* **Case Normalization:** Ensures all headers are converted to lowercase.
+### 2. Family Members Listing
+- **Source:** `FamilyMembersListing.csv`
+- **Output:** `ETL-FamilyMembersListing.csv`
+- **Actions:** Maps patient NRIC, names, relationships, and phones. Automatically generates an `id` sequence.
 
 ---
 
-## 📖 How to Use
-1.  **Export** your membership data as a CSV (default: `DataListing-AACMemberDetails.csv`).
-2.  **Open** this Web App link.
-3.  **Upload** the CSV file using the file picker.
-4.  **Click "Process File"**.
-5.  **Download** the resulting `ETL-AACMemberDetails.csv` and save it to your local drive.
+## 📖 Instructions
+1. Select the **File Type** from the dropdown menu.
+2. Upload the corresponding **Source CSV** from your local drive.
+3. Click **Run ETL Process**.
+4. Click **Download Result** to save the formatted file back to your computer.
 
 ---
 
-## 🔒 Privacy & Security
-* **Zero Server Uploads:** This app uses `PapaParse.js` to process data locally in your browser's memory.
-* **Privacy:** No membership data is sent to GitHub or any external server. 
-
----
-
-## 🏗 Setup for Developers
-If you want to host this yourself:
-1. Clone this repository.
-2. Ensure `index.html` is in the root directory.
-3. Enable **GitHub Pages** in the repository settings under the `main` branch.
+## 🔒 Security
+All processing is done **client-side** in your browser. No data is ever uploaded to a server or stored on GitHub.
