@@ -3,8 +3,7 @@
 A lightweight, browser-based utility to transform membership data exports into a standardized ETL format. This tool runs entirely in your browser via GitHub Pages, ensuring your data never leaves your local machine.
 
 ## 🚀 Live Link
-[**Click here to open the Web App**]([https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/](https://antloh-sh.github.io/aac_members_etl/)
-*(Note: Replace the link above with your actual GitHub Pages URL)*
+[**Click here to open the Web App**](https://antloh-sh.github.io/aac_members_etl/)
 
 ---
 
